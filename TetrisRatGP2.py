@@ -4,7 +4,7 @@ import numpy as np
 import math
 from math import inf
 from TetrisGameAI3 import Figure, TetrisAI, playGame, playGameThread
-from TreeGenotype import treeGenotype
+from TreeGenotypeF import treeGenotype
 from numba import jit, cuda
 from multiprocessing import Process
 from threading import Thread
@@ -43,6 +43,54 @@ class Rat:
     def generateRandom(self, size):
         return [treeGenotype() for _ in range(size)]
 
+    def lookAround(self, x, y):
+        for row in range(1,4):
+            for col in range(-1,2):
+                if row == col:
+                    continue
+                yVal = row+y
+                xVal = col+x+self.game.figure.x
+                if xVal in range(len(self.game.field[0])):
+                    if yVal in range(len(self.game.field)):
+                        if self.game.field[yVal][xVal] > 0:
+                            return True
+        return False
+
+    def getState2(self):
+        #print('old\n',self.getState3())
+        board = self.game.field
+        width = len(self.game.field[0])-1
+        height = len(self.game.field)-1
+        #print('new')
+        piece = self.game.figure.image()
+        newBoard = [[y for y in x] for x in board]
+
+        touching = False
+        #print(self.game.field)
+        for item in piece:
+            ny = height - abs((item//4)-4)
+            nx = item%4
+            #print(ny)
+
+            if self.game.figure.y+item//4  == 23 or self.lookAround(nx, ny):
+                #print('found')
+                touching = True
+                continue
+
+        if touching:
+            for item in piece:
+                nx = item//4
+                ny = item%4
+                newBoard[nx+self.game.figure.y][ny+self.game.figure.x] = 1
+
+        for row in range(len(newBoard)):
+            for col in range(len(newBoard[0])):
+                if newBoard[row][col] > 0:
+                    newBoard[row][col] = 1
+                else:
+                    newBoard[row][col] = 0
+        return newBoard
+
     def getState(self):
         board = self.game.field
         piece = self.game.figure
@@ -55,50 +103,108 @@ class Rat:
         #print(board)
         return np.array(newBoard, dtype=int)
 
-    #finds the highest predicted score location based on the fitness function and parameters in genome
-    def find_best_move(self):
+    def find_best_move2(self, strat):
         if self.game.state == 'gameover':
             return (0,0,0)
+        #print(type(strat))
+        if isinstance(strat, list):
+            rType = 1
+        elif isinstance(strat, treeGenotype):
+            rType = 2
+        else:
+            rType = 0
+        #print(rType)
         fig = self.game.figure
         ogFig = (fig.x, fig.y, fig.rotation)
-        fits = []
-        bestFit = -10000
+        self.game.test_space()
+        beast = (fig.x, fig.y, fig.rotation, fig.type, self.rewardFunc(self.getState2()))
+        fig.y = ogFig[1]
+
         for _ in range(len(fig.figures[fig.type])):
 
             self.game.figure.x = ogFig[1]
-            self.game.test_space()
-            fits.append((fig.x, fig.y, fig.rotation, fig.type, self.rewardFunc(self.getState())))
-            fig.y = ogFig[1]
-            for x in range(9):
-                complete = self.game.go_side(-1)
-                if not complete:
-                    break
-                self.game.test_space()
-                if self.rewardFunc(self.getState()) > bestFit:
-                    fits.append((fig.x, fig.y, fig.rotation, fig.type, self.rewardFunc(self.getState())))
-                fig.y = ogFig[1]
-                #if x % 4 == 3:
-                    #self.game.test_down()
-            self.game.figure.x = ogFig[1]
 
             for _ in range(9):
-                complete = self.game.go_side(1)
-                if not complete:
-                    break
                 self.game.test_space()
-                if self.rewardFunc(self.getState()) > bestFit:
-                    fits.append((fig.x, fig.y, fig.rotation, fig.type, self.rewardFunc(self.getState())))
+                fit = self.rewardFunc(self.getState2())
+
+                if fit > beast[4]:
+                    beast = (fig.x, fig.y, fig.rotation, fig.type, fit)
+
                 fig.y = ogFig[1]
-                #if x % 4 == 3:
-                    #self.game.test_down()
-                #print('tested pos')
+
+                if not self.game.go_side(-1):
+                    break
+
+            self.game.figure.x = ogFig[1]
+            self.game.go_side(1)
+            for _ in range(9):
+                self.game.test_space()
+                fit = self.rewardFunc(self.getState2())
+
+                if fit > beast[4]:
+                    beast = (fig.x, fig.y, fig.rotation, fig.type, fit)
+
+                fig.y = ogFig[1]
+
+                if not self.game.go_side(1):
+                    break
+
             self.game.figure.rotate()
 
         self.game.figure.x = ogFig[0]
         self.game.figure.y = ogFig[1]
         self.game.figure.rotation = ogFig[2]
 
-        return  list(max(fits, key = lambda x : x[4]))
+        return beast
+
+    #finds the highest predicted score location based on the fitness function and parameters in genome
+    def find_best_move(self):
+        if self.game.state == 'gameover':
+            return (0,0,0)
+        fig = self.game.figure
+        ogFig = (fig.x, fig.y, fig.rotation)
+        self.game.test_space()
+        beast = (fig.x, fig.y, fig.rotation, fig.type, self.rewardFunc(self.getState2()))
+        fig.y = ogFig[1]
+
+        for _ in range(len(fig.figures[fig.type])):
+
+            self.game.figure.x = ogFig[1]
+
+            for _ in range(9):
+                self.game.test_space()
+                fit = self.rewardFunc(self.getState2())
+
+                if fit > beast[4]:
+                    beast = (fig.x, fig.y, fig.rotation, fig.type, fit)
+
+                fig.y = ogFig[1]
+
+                if not self.game.go_side(-1):
+                    break
+
+            self.game.figure.x = ogFig[1]
+            self.game.go_side(1)
+            for _ in range(9):
+                self.game.test_space()
+                fit = self.rewardFunc(self.getState2())
+
+                if fit > beast[4]:
+                    beast = (fig.x, fig.y, fig.rotation, fig.type, fit)
+
+                fig.y = ogFig[1]
+
+                if not self.game.go_side(1):
+                    break
+
+            self.game.figure.rotate()
+
+        self.game.figure.x = ogFig[0]
+        self.game.figure.y = ogFig[1]
+        self.game.figure.rotation = ogFig[2]
+
+        return beast
 
     #responsible for performing the best predicted action
     def makeMove(self):
@@ -229,7 +335,7 @@ class Rat:
     def rewardFunc(self, A):
         result = 0
         params = {}
-        A = self.getTower(A)
+        #A = self.getTower(A)
         HA = self.towerHeights(A)
         params['B'] = self.bumps(HA)*(self.hyperParams[0])
         params['A'] = self.avgHeight(A,HA)*(self.hyperParams[1])
@@ -243,6 +349,53 @@ class Rat:
 
 #['A','L','H','C','B','#.#']
 #@jit(nopython=True)
+
+    def rewardFunc2(self, A, RFunc, gene):
+        result = 0
+        #A = getTower(A)
+        #print(A)
+        HA = self.towerHeights(A)
+        #print(RFunc)
+        if RFunc == 1:
+            params = {}
+            params['B'] = self.bumps(HA)*(gene[1][0])
+            params['A'] = self.avgHeight(A,HA)*(gene[1][1])
+            params['H'] = self.numHoles(A,HA)*(gene[1][2])
+            params['C'] = self.completeLines(A)*(gene[1][3])
+            params['L'] = self.boardLevel(A)*(gene[1][4])
+            params['M'] = self.maxHeight(HA)*(gene[1][5])
+            result = sum(params.values())
+            result += gene[0].evaluate(params)
+        elif RFunc == 2:
+            params = {}
+            params['B'] = self.bumps(HA)*(gene.hyperParams.params[0])
+            params['A'] = self.avgHeight(A,HA)*(gene.hyperParams.params[1])
+            params['H'] = self.numHoles(A,HA)*(gene.hyperParams.params[2])
+            params['C'] = self.completeLines(A)*(gene.hyperParams.params[3])
+            params['L'] = self.boardLevel(A)*(gene.hyperParams.params[4])
+            params['M'] = self.maxHeight(HA)*(gene.hyperParams.params[5])
+            result = sum(params.values())
+            result += gene.evaluate(params)
+        else:
+            bumpsReward = self.bumps(HA)
+            result -= gene.params[0]*bumpsReward
+
+            heightReward = self.avgHeight(A,HA)
+            result -= gene.params[1]*heightReward
+
+            deltaReward = self.numHoles(A,HA)
+            result -= gene.params[2]*deltaReward
+
+            lineReward = self.completeLines(A)
+            result += gene.params[3]*lineReward
+
+            levelReward = self.boardLevel(A)
+            result += gene.params[4]*levelReward
+
+            maxHeightReward = self.maxHeight(HA)
+            result -= gene.params[5]*maxHeightReward
+
+        return result
 
 def averageDistance(agent, current):
     total = 0

@@ -84,74 +84,15 @@ def repopulate(agent, numGens):
     agent.population.extend(newGenes)
 
 #play designated number of games with each genome and assign fitness based on average and median
-def evaluatePopulation(agent, population, testMethod = 2, bench=False):
+def evaluatePopulation(agent, population, bench=False):
     genomeType = agent.GType
-    #print(bench)
     for gene in population:
         agent.currentGenome = gene
-        if testMethod == 0:
-            newScores, newLines = testGensThreaded(agent, bench)
-        elif testMethod == 1:
-            newScores, newLines = testGensProcess(agent, bench)
-        else:
-            #print('ev',bench)
-            newScores, newLines = testGensPoolProcess(agent, bench)
-        #print(newLines)
-        #print('updates',newScores, newLines)
-        if genomeType == 1:
-            gene.fitness = avgScore(newLines)-stdDev(newLines)*.5
-        else:
-            gene.fitness = avgScore(newLines)
+        newScores, newLines = testGensPoolProcess(agent, bench)
+        gene.fitness = avgScore(newLines)-stdDev(newLines)*.5
 
     return population
 
-
-def testGens(agent, goalScore, bench):
-    roundScores = []
-    roundLines = []
-    for gen in range(agent.testPerAgent):
-
-        score, lines = playGame([agent.currentGenome,agent.hyperParams], goalScore)
-
-        if lines > goalScore*.7:
-            print(' score ', score, ' lines ', lines)
-
-        roundScores.append(score)
-        roundLines.append(lines)
-
-    return roundScores, roundLines
-
-def testGensThreaded(agent, bench, numThreads = 4):
-    roundScores = []
-    roundLines = []
-    #print(agent.testPerAgent)
-    if agent.testPerAgent < 4:
-        numThreads = agent.testPerAgent
-    threads = [None] * numThreads
-    recentScores = []
-    while agent.testPerAgent > len(roundLines):
-
-        for i in range(len(threads)):
-            living = sum([1 for i in threads if i != None and i.is_alive()])
-            if living+len(roundLines) < agent.testPerAgent and (threads[i] == None or  not threads[i].is_alive()):
-                threads[i] = Thread(target=(lambda q, t, arg1,arg2,arg3: q.append(t(arg1,arg2,arg3))), args= (recentScores, playGameThread, agent.currentGenome, 4000, bench))
-                threads[i].start()
-        #print([i.is_alive() for i in threads])
-        for i in range(len(threads)):
-            threads[i].join()
-        #print([i.is_alive() for i in threads])
-        for item in recentScores:
-            #print(item)
-            roundScores.append(item[0])
-            roundLines.append(item[1])
-            recentScores.remove(item)
-
-        #print(len(roundLines))
-        #print(roundLines)
-    #print(roundLines)
-    return roundScores, roundLines
-
-#@jit(target = 'cpu')
 def testGensPoolProcess(agent, bench, numProcesses = 6):
     roundScores = []
     roundLines = []
@@ -161,8 +102,7 @@ def testGensPoolProcess(agent, bench, numProcesses = 6):
 
     with Pool(processes=numProcesses) as pool:
         recentScores = []#(lambda q, t, arg1,arg2: q.append(t(arg1,arg2))), (recentScores, playGameThread, agent.currentGenome, 4000)
-        recentScores = [pool.apply_async(playGameThread, (agent.currentGenome, 4000, bench)) for _ in range(agent.testPerAgent)]
-        #print(len(multiprocessing.active_children()))
+        recentScores = [pool.apply_async(playGameThread, (agent.currentGenome, 8000, bench)) for _ in range(agent.testPerAgent)]
         recentScores = [res.get() for res in recentScores]
 
         pool.close()
@@ -174,38 +114,7 @@ def testGensPoolProcess(agent, bench, numProcesses = 6):
             roundLines.append(item[1])
     return roundScores, roundLines
 
-def testGensProcess(agent, bench, numProcesses = 4):
-    roundScores = []
-    roundLines = []
-    if agent.testPerAgent < 4:
-        numProcesses = agent.testPerAgent
-    processes = [None] * numProcesses
-    recentScores = []
-    addScore = recentScores.append
-    while agent.testPerAgent > len(roundLines):
-
-        for i in range(len(processes)):
-            living = sum([1 for i in processes if i != None and i.is_alive()])
-            if living+len(roundLines) < agent.testPerAgent and (processes[i] == None or  not processes[i].is_alive()):
-                processes[i] = Process(target=(lambda q, t, arg1,arg2,arg3: q.append(t(arg1,arg2,arg3))), args= (recentScores, playGameThread, agent.currentGenome, 4000, bench))
-                processes[i].start()
-        #print([i.is_alive() for i in processes])
-        for i in range(len(processes)):
-            processes[i].join()
-        #print([i.is_alive() for i in processes])
-        for item in recentScores:
-            #print(item)
-            roundScores.append(item[0])
-            roundLines.append(item[1])
-            recentScores.remove(item)
-
-        #print(len(roundLines))
-        #print(roundLines)
-    #print(roundLines)
-    return roundScores, roundLines
-
 def avgScore(scoreCard):
-    #print(type(sum(scoreCard)), type(max(1,len(scoreCard)))
     return sum(scoreCard)/ max(1,len(scoreCard))
 
 #returns median score in scoreCard
@@ -242,10 +151,10 @@ def updateHypers(agent):
 
 
 #@profile
-def trainGP(gtype, goal=100, tests=16, start_size = 15, evalType = 2, mode='train'):
+def trainGP(gtype, goal=100, tests=16, start_size = 15, mode='train'):
     #temp = 1
-    lookback_distance=101
-    impressive_score = 4000
+    lookback_distance=150
+    impressive_score = 8000
     generation = 0
     bestGenome = None
     total_process_time = 0.0
@@ -258,11 +167,9 @@ def trainGP(gtype, goal=100, tests=16, start_size = 15, evalType = 2, mode='trai
     agent.testPerAgent = tests
     if not mode == 'hof':
         if mode == 'bench':
-            #print('benchmark evals')
-            agent.population = evaluatePopulation(agent, agent.population, evalType, True)
+            agent.population = evaluatePopulation(agent, agent.population, True)
         else:
-            #print('pop evals')
-            agent.population = evaluatePopulation(agent, agent.population, evalType, False)
+            agent.population = evaluatePopulation(agent, agent.population, False)
     end_time = timer()
     time_delta = end_time - start_time
     total_process_time += time_delta
@@ -274,7 +181,7 @@ def trainGP(gtype, goal=100, tests=16, start_size = 15, evalType = 2, mode='trai
     agent.population.sort(key=lambda x:x.fitness)
     print('Population initilized')
     print('----------------------------------------------------------------------------------------------------------------------------')
-    while generation < goal:
+    while (total_process_time/3600) < goal:
 
         fitnessVals = [p.fitness for p in agent.population]
         aver = avgScore(fitnessVals)
@@ -283,17 +190,19 @@ def trainGP(gtype, goal=100, tests=16, start_size = 15, evalType = 2, mode='trai
         print('----------------------------------------------------------------------------------------------------------------------------')
         x = len(agent.population)
         for genome in agent.population:
-            print(x,'- fitness:',round(genome.fitness),'\tGene',genome) #,'\tpop',genome.popSize,'\tinf',genome.influx,'\tm-r',round(genome.mutRate,ndigits=1),'\t tmp',round(genome.temp,ndigits=1),
+            print(x,'- f:',round(genome.fitness),'\tGene',genome) #,'\tpop',genome.popSize,'\tinf',genome.influx,'\tm-r',round(genome.mutRate,ndigits=1),'\t tmp',round(genome.temp,ndigits=1),
             x-=1
         print('============================================================================================================================')
-        print('|Generation: ',generation,'\tBest Fitness: ',round(bestGenome.fitness, ndigits=3), '\tAverage Fitness: ', round(aver,ndigits=3),'\tPercent to Goal: ',round((generation/goal)*100, ndigits=2),'%','|')
+        print('|Generation: ',generation,'\tBest Fitness: ',round(bestGenome.fitness, ndigits=3), '\tAverage Fitness: ', round(aver,ndigits=3),'\tPercent to goal',round(100*(total_process_time/3600)/goal, ndigits=2),'%','|')
         print('============================================================================================================================')
         print('|Population Influx: ',agent.influx, '\tPopulation Size: ',agent.popSize, '\tTemperature: ',round(agent.temperature,ndigits=3), '\tMutation Rate: ',round(agent.mutationRate,ndigits=2),'|')
         print('============================================================================================================================')
 
         print('Performing Repopulation...')
         start_time = timer()
-        repopulate(agent, agent.popSize + agent.influx) #round(agent.popSize*(6+(temp+1)**0.6)**0.16)
+        if gtype == 1 or gtype == 2:
+            repopulate(agent, agent.popSize + agent.influx) #round(agent.popSize*(6+(temp+1)**0.6)**0.16)
+
         #temp = 1 + (bestGenome.fitness/(1-(bestGenome.fitness/(goal+1))))**0.81
         #mutatePopulation(agent, agent.temperature, agent.popSize)
         if aver < 200:
@@ -312,7 +221,7 @@ def trainGP(gtype, goal=100, tests=16, start_size = 15, evalType = 2, mode='trai
         if contender.fitness > bestGenome.fitness:
             bestGenome = contender
             if bestGenome.fitness > impressive_score:
-                with open('./model/params%i.txt'%generation,'w') as file:
+                with open('./model/longRun/params%i.txt'%generation,'w') as file:
                     file.write(str(bestGenome)+str(bestGenome.fitness))
                     file.close()
         topScores.append(bestGenome.fitness)
@@ -326,26 +235,26 @@ def trainGP(gtype, goal=100, tests=16, start_size = 15, evalType = 2, mode='trai
             bestGenome = agent.population[0]
 
         #clear_output(wait=True)
+    if goal > 1:
+        print('----------------------------------------------------------------------------------------------------------------------------')
+        x = len(agent.population)
+        for genome in agent.population:
+            print(x,'\tf:',round(genome.fitness),'\tgene',genome) #,'\tpop',genome.popSize,'\tinf',genome.influx,'\tm-r',round(genome.mutRate,ndigits=1),'\t tmp',round(genome.temp,ndigits=1),
+            x-=1
+        print('============================================================================================================================')
+        print('|Generation: ',generation,'\tBest Fitness: ',round(bestGenome.fitness, ndigits=3), '\tAverage Fitness: ', round(aver,ndigits=3),'|')
+        print('============================================================================================================================')
+        print('|Population Influx: ',agent.influx, '\tPopulation Size: ',agent.popSize, '\tTemperature: ',round(agent.temperature,ndigits=3), '\tMutation Rate: ',round(agent.mutationRate,ndigits=2),'|')
+        print('============================================================================================================================')
 
-    print('----------------------------------------------------------------------------------------------------------------------------')
-    x = len(agent.population)
-    for genome in agent.population:
-        print(x,'\tf:',round(genome.fitness),'\tpms',genome) #,'\tpop',genome.popSize,'\tinf',genome.influx,'\tm-r',round(genome.mutRate,ndigits=1),'\t tmp',round(genome.temp,ndigits=1),
-        x-=1
-    print('============================================================================================================================')
-    #print('|Generation: ',generation,'\tBest Fitness: ',round(bestGenome.fitness, ndigits=3), '\tAverage Fitness: ', round(aver,ndigits=3),'\tPercent to Goal: ',round((generation/goal)*100, ndigits=2),'%','|')
-    print('============================================================================================================================')
-    #print('|Population Influx: ',agent.influx, '\tPopulation Size: ',agent.popSize, '\tTemperature: ',round(agent.temperature,ndigits=3), '\tMutation Rate: ',round(agent.mutationRate,ndigits=2),'|')
-    print('============================================================================================================================')
 
-
-    with open('./model/paramsfinal%f.txt'%round(bestGenome.fitness),'w') as f:
+    with open('./model/longRun/paramsfinal%f.txt'%round(bestGenome.fitness),'w') as f:
         #f.write(str(bestGenome)+str(bestGenome.fitness)+'\n')
         for x in range(4):
             f.write(str(agent.population[-x])+str(agent.population[-x].fitness)+'\n')
         f.close()
 
-    with open('./model/logOverTime%f.txt'%round(bestGenome.fitness), 'w') as f:
+    with open('./model/longRun/logOverTime%f.txt'%round(bestGenome.fitness), 'w') as f:
         for key, val in log.items():
             valStr = ''
             for value in val:
@@ -370,9 +279,9 @@ if __name__ == '__main__':
     #trainGP(1,0,8,3,2,'bench')
     if len(args) == 0:
         for x in range(3):
-            trainGP(x, 300, mode='train')
+            trainGP(x, 63, mode='train')
     elif len(args) == 1:
-        trainGP(training_type, 10)
+        trainGP(training_type, 0.027)
     elif len(args) == 2:
         trainGP(training_type, num_gens, mode='train')
     else:

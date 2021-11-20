@@ -3,7 +3,6 @@ import random
 import numpy as np
 from TreeGenotypeF import treeGenotype
 from GenomeF import genome
-
 import cProfile, pstats, io
 
 def profile(fnc):
@@ -115,27 +114,13 @@ class TetrisAI:
         wid = self.width
         hei = self.height
         piece = self.figure.image()
-
         for item in piece:
             nx = item//4
             ny = item%4
-            #print('a', nx + curY > hei -1)
-            #print('b', ny +curX not in range(0,wid-1))
-            #print('c', nx + curY > hei -1)
             if nx + curY > hei -1 or \
                 ny +curX not in range(0,wid) or \
                 self.field[nx+self.figure.y][ny+self.figure.x] > 0:
                     return True
-
-
-        #for i in range(4):
-            #for j in range(4):
-                #if i * 4 + j in self.figure.image():
-                #    if i + curY > hei - 1 or \
-                #            j + curX > wid - 1 or \
-                    #        j + curX < 0 or \
-                #            self.field[i + curY][j + curX] > 0:
-                #        return True
         return False
 
     def getLevel(self):
@@ -269,24 +254,12 @@ class TetrisAI:
                 #print(self.field[row+x][col+y])
                 #        print('x,y', xVal,yVal)
 
+
                         if self.field[yVal][xVal] > 0:
                             return True
         return False
 
     def getState(self):
-        board = self.field
-        piece = self.figure
-        #print(board)
-        newBoard = [[y for y in x] for x in board]
-        arr = [[0 for i in range(4)] for y in range(4)]
-        for x in range(len(arr)):
-            for y in range(len(arr)):
-                if  x*len(arr[0])+y in piece.image():
-                    newBoard[piece.y+x][piece.x+y] = 1
-        #print('state', newBoard)
-        return np.array(newBoard, dtype=int)
-
-    def getState2(self):
         #print('old\n',self.getState3())
         board = self.field
         width = len(self.field[0])-1
@@ -321,17 +294,6 @@ class TetrisAI:
                     newBoard[row][col] = 0
         return newBoard
 
-    def getState3(self):
-        board = self.field
-        piece = self.figure.image()
-        newBoard = [[y for y in x] for x in board]
-
-        for item in piece:
-            nx = item//4
-            ny = item%4
-            newBoard[nx+self.figure.y][ny+self.figure.x] = 1
-
-        return newBoard
 
     #finds the highest predicted score location based on the fitness function and parameters in genome
     def find_best_move(self, strat):
@@ -348,7 +310,7 @@ class TetrisAI:
         fig = self.figure
         ogFig = (fig.x, fig.y, fig.rotation)
         self.test_space()
-        beast = (fig.x, fig.y, fig.rotation, fig.type, rewardFunc(self.getState2(),  rType, strat))
+        beast = (fig.x, fig.y, fig.rotation, fig.type, rewardFunc(self.getState(),  rType, strat))
         fig.y = ogFig[1]
 
         for _ in range(len(fig.figures[fig.type])):
@@ -357,7 +319,7 @@ class TetrisAI:
 
             for _ in range(9):
                 self.test_space()
-                fit = rewardFunc(self.getState2(), rType, strat)
+                fit = rewardFunc(self.getState(), rType, strat)
 
                 if fit > beast[4]:
                     beast = (fig.x, fig.y, fig.rotation, fig.type, fit)
@@ -371,7 +333,7 @@ class TetrisAI:
             self.go_side(1)
             for _ in range(9):
                 self.test_space()
-                fit = rewardFunc(self.getState2(), rType, strat)
+                fit = rewardFunc(self.getState(), rType, strat)
 
                 if fit > beast[4]:
                     beast = (fig.x, fig.y, fig.rotation, fig.type, fit)
@@ -388,7 +350,6 @@ class TetrisAI:
         self.figure.rotation = ogFig[2]
 
         return beast
-
 
     #responsible for performing the best predicted action
     def makeMove(self, strat):
@@ -418,6 +379,7 @@ class TetrisAI:
             self.goalPos = None
 
     #helper function for fitness function retuns maximum hight of the board not including the current piece
+
 def maxHeight(ha):
     return max(ha)
 
@@ -435,8 +397,6 @@ def boardLevel(A):
 #helper function for fitness function retuns number of open spots below at least one block
 def numHoles(A, ha):
     heights = [len(A)-value for value in ha]
-    #for x in range(len(heights)):
-        #heights[x] = len(A) - ha[x]
     return sum([sum([1 for col in range(len(A[0])) if (heights[col] < row and A[row][col] == 0)]) for row in range(len(A))])
 
 #helper function for fitness function retuns number of lines that are full
@@ -447,38 +407,6 @@ def completeLines(A):
 def bumps(ha):
     return sum([abs(ha[x]-ha[x+1]) for x in range(len(ha)-1)])/len(ha)
 
-# return board without the current piece
-def getTower(original):
-    width = len(original[0])
-    height = len(original)
-    curQ = [(height-1,z) for z in range(width)]
-    board = [[0 for _ in range(width)] for z in range(height)]
-    visited = [[0 for _ in range(width)]  for z in range(height)]
-
-    while len(curQ) > 0:
-
-      look = curQ.pop(0)
-
-      if look[0] < 0:
-          continue
-
-      if visited[look[0]][look[1]] == 0:
-
-          visited[look[0]][look[1]] = 1
-
-          if original[look[0]][look[1]] > 0:
-
-              board[look[0]][look[1]] = 1
-
-              if look[0]-1 >= 0:
-                  curQ.append((look[0]-1,look[1]))
-              if look[1]+1 < width:
-                  curQ.append((look[0],look[1]+1))
-              if look[1]-1 >= 0:
-                  curQ.append((look[0],look[1]-1))
-
-    return board
-
 #helper function retuns the height of each collum
 def towerHeights(original):
     width = len(original[0])
@@ -486,11 +414,8 @@ def towerHeights(original):
     heights = [height for _ in range(width)]
     for x in range(height):
         for y in range(width):
-
             if original[x][y] == 1 and heights[y] > x:
                 heights[y] = x
-    #for h in heights:
-        #h -= height
     return heights
 
 #the fitness function that uses the evalueate function and all helper functions to score moves
@@ -541,33 +466,6 @@ def rewardFunc(A, RFunc, gene):
 
     return result
 
-def playGame(strat, goal):
-    done = False
-    game = TetrisAI(gene=strat)
-    while not done: # play one game
-        lines = 0
-        score = 0
-        if game.figure is None:
-            game.goalPos = None
-            game.new_figure()
-
-        done = game.makeMove(strat) # ai makes a move
-
-        if game.state == 'gameover':
-            done = True
-        game.step += 1
-        if game.figure is None:
-            game.new_figure()
-        game.go_down()
-
-        done = True if game.state == 'gameover' else False
-
-
-        if game.totalLinesCleared > goal*.7 and done:
-            print('score ', game.score, ' lines ', game.totalLinesCleared)
-
-
-    return game.score, game.totalLinesCleared
 #@profile
 def playGameThread(strat, goal, ben=False):
     done = False
@@ -595,7 +493,7 @@ def playGameThread(strat, goal, ben=False):
             print('score ', game.score, ' lines ', game.totalLinesCleared)
 
 
-    return (game.score ,game.totalLinesCleared)
+    return game.score, game.totalLinesCleared
     #print('res',results)
 
 #print(playGameThread(strat=genome([0.588,0.7982, 0.27013, 0.16258, 0.58243, -0.02852]) , goal=4000, ben= True))

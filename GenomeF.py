@@ -79,7 +79,7 @@ class genome:
         paramsMutated = random.randint(1,len(copy.params))
         mutants = random.sample([x for x in range(len(copy.params))], k=paramsMutated)
         for val in mutants:
-            value = random.uniform(-10,10)/temp
+            value = random.uniform(-2,2)/temp
             copy.params[val] += value
 
         upper = random.randrange(1,int(temp+2))

@@ -37,6 +37,7 @@ class Rat:
                 self.game = TetrisAI(frames_per_second, bench=False)
         else:
             from TetrisGameAI2 import TetrisAI as TesterAI
+
             self.game = TesterAI(frames_per_second)
 
         if self.GType == 2:

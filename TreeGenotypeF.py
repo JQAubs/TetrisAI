@@ -13,7 +13,7 @@ class genome:
         if parameters != None:
             self.params = parameters
         else:
-            self.params = [random.uniform(0,10) for x in range(6)]
+            self.params = [random.uniform(-3,3) for x in range(6)]
 
     def __str__(self):
         result = '['
@@ -133,8 +133,6 @@ class treeNode():
             if not self.right is None:
                 string += self.right.strHelp()
         return string
-
-
 
     def strHelp(self):
         string = ''
@@ -384,7 +382,7 @@ class treeGenotype:
         self.hyperParams = genome(hyper)
 
     def __str__(self):
-        return str(self.gene) +'\t'+ str(self.hyperParams)
+        return str(self.hyperParams) +'\t'+ str(self.gene)
 
     def __len__(self):
         return(len(self.gene))
@@ -441,67 +439,72 @@ class treeGenotype:
     def recombine(self, mate, **kwargs):
         child = self.__class__(treeType = self.TType, popSize = int(self.avg(self.popSize, mate.popSize)), influx =int(self.avg(self.influx, mate.influx)), temp = self.avg(self.temperature, mate.temperature), mr =self.avg(self.mutRate, mate.mutRate))
         child.gene = self.copyGene()
-        if self.TType == 3:
+        if self.TType == 3 and random.random() < 0.33:
             child.hyperParams = self.hyperParams.recombine(mate.hyperParams)
-        index = random.randint(0,len(self)-1)
-        nodeOld = child.getNode(index)
-        index = random.randint(0,len(mate)-1)
-        nodeNew = mate.getNode(index)
-
-        if nodeNew.nType == 0 and nodeOld.nType == 1:
-            count = 0
-            while not nodeNew.nType == nodeOld.nType:
-                nodeNew = mate.gene.getRandom()
-                count += 1
-                if count > 10:
-                    return child
-            nodeNew.height = nodeOld.height
-        if nodeNew.left != None:
-            nodeOld.left = treeNode(parent = nodeOld, in_nodes = self.internal_nodes, le_nodes = self.leaf_nodes).copyHelp(nodeNew)
-            nodeOld.right = treeNode(parent = nodeOld, in_nodes = self.internal_nodes, le_nodes = self.leaf_nodes).copyHelp(nodeNew)
         else:
-            nodeOld.left = None
-            nodeOld.right = None
+            index = random.randint(0,len(self)-1)
+            nodeOld = child.getNode(index)
+            index = random.randint(0,len(mate)-1)
+            nodeNew = mate.getNode(index)
 
-        if nodeOld.data == '#.#':
-            nodeOld.data = round(random.triangular(0.0001,5), ndigits = 4)
-        nodeOld.data = nodeNew.data
-        nodeOld.nType = nodeNew.nType
+            if nodeNew.nType == 0 and nodeOld.nType == 1:
+                count = 0
+                while not nodeNew.nType == nodeOld.nType:
+                    nodeNew = mate.gene.getRandom()
+                    count += 1
+                    if count > 10:
+                        return child
+                nodeNew.height = nodeOld.height
+            if nodeNew.left != None:
+                nodeOld.left = treeNode(parent = nodeOld, in_nodes = self.internal_nodes, le_nodes = self.leaf_nodes).copyHelp(nodeNew)
+                nodeOld.right = treeNode(parent = nodeOld, in_nodes = self.internal_nodes, le_nodes = self.leaf_nodes).copyHelp(nodeNew)
+            else:
+                nodeOld.left = None
+                nodeOld.right = None
 
-        child.trim()
+            if nodeOld.data == '#.#':
+                nodeOld.data = round(random.triangular(0.0001,5), ndigits = 4)
+            nodeOld.data = nodeNew.data
+            nodeOld.nType = nodeNew.nType
+
+            child.trim()
         return child
-
 
     def mutate(self, temp, **kwargs):
         copy = self.__class__(treeType =self.TType, popSize =self.popSize, influx =self.influx, temp =self.temperature, mr =self.mutRate)
         copy.gene = self.copyGene()
-        if self.TType == 3:
+        #choose between mutation the params or the tree not both
+        if self.TType == 3 and random.random() < 0.3:
             copy.hyperParams = self.hyperParams.mutate(temp)
-        index = random.randint(0,len(self)-1)
-        #print('index-self',index, self)
-        randomNode = self.getNode(index)
-        #print('node',randomNode)
-
-
-        if randomNode.nType == 1:
-            mutType = random.randint(0,2)
-            #grow fill
-            if mutType == 0:
-                randomNode.data = random.choice(self.internal_nodes)
-                randomNode.left = randomNode.left.grow(depth = self.maxDepth, prev = randomNode)
-                randomNode.right = randomNode.right.grow(depth = self.maxDepth, prev = randomNode)
-            #full fill
-            elif mutType == 1:
-                randomNode.data = random.choice(self.internal_nodes)
-                randomNode.left = randomNode.left.full(depth = self.maxDepth, prev = randomNode)
-                randomNode.right = randomNode.right.full(depth = self.maxDepth, prev = randomNode)
-            # new value
-            else:
-                randomNode.data = random.choice(self.leaf_nodes)
-
         else:
-            randomNode.data = random.choice(self.internal_nodes)
-        copy.trim()
+            copy.hyperParams = self.hyperParams.copy()
+            index = random.randint(0,len(self)-1)
+            #print('index-self',index, self)
+            randomNode = self.getNode(index)
+            #print('node',randomNode)
+
+
+            if randomNode.nType == 1:
+                mutType = random.randint(0,2)
+                #grow fill
+                if mutType == 0:
+                    randomNode.data = random.choice(self.internal_nodes)
+                    randomNode.left = randomNode.left.grow(depth = self.maxDepth, prev = randomNode)
+                    randomNode.right = randomNode.right.grow(depth = self.maxDepth, prev = randomNode)
+                #full fill
+                elif mutType == 1:
+                    randomNode.data = random.choice(self.internal_nodes)
+                    randomNode.left = randomNode.left.full(depth = self.maxDepth, prev = randomNode)
+                    randomNode.right = randomNode.right.full(depth = self.maxDepth, prev = randomNode)
+                # new value
+                else:
+                    randomNode.data = random.choice(self.leaf_nodes)
+
+            else:
+                randomNode.data = random.choice(self.internal_nodes)
+
+            copy.trim()
+
         upper = random.randrange(1,int(temp+2))
         lower = random.randrange(-int(temp+2),-1)
         value = random.randint(lower,upper)
@@ -529,6 +532,7 @@ class treeGenotype:
             copy.temperature += value//2
         else:
             copy.temperature = 1
+
         return copy
 
 
